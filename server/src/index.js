@@ -6,6 +6,8 @@ import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { registerHandlers } from './socket/handlers.js';
+import authRoutes from './auth/routes.js';
+import quizRoutes from './quiz/routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3001;
@@ -48,6 +50,8 @@ app.post('/api/upload', upload.single('image'), (req, res) => {
 });
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
+app.use('/api/auth', authRoutes);
+app.use('/api/quizzes', quizRoutes);
 
 // Socket.io
 io.on('connection', (socket) => {

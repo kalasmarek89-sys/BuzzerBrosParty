@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react';
+import { useLocation, Link } from 'react-router-dom';
 import { socket } from '../socket.js';
+import { useAuth } from '../context/AuthContext.jsx';
+import { api } from '../api.js';
 
 const ANSWER_LABELS = ['A', 'B', 'C', 'D'];
 const ANSWER_COLORS = [
@@ -19,17 +22,34 @@ const emptyQuestion = () => ({
 });
 
 export default function HostPage() {
-  const [phase, setPhase] = useState('setup'); // setup | lobby | question | reveal | finished
+  const location = useLocation();
+  const { user } = useAuth();
+  const preloaded = location.state?.quiz ?? null;
+
+  const [phase, setPhase] = useState('landing'); // landing | setup | lobby | question | reveal | finished
   const [pin, setPin] = useState('');
   const [pinInput, setPinInput] = useState('');
   const [error, setError] = useState('');
   const [players, setPlayers] = useState([]);
-  const [questions, setQuestions] = useState([emptyQuestion()]);
+  const [questions, setQuestions] = useState(
+    preloaded?.questions?.length ? preloaded.questions : [emptyQuestion()]
+  );
   const [currentQ, setCurrentQ] = useState(null);
   const [answerUpdate, setAnswerUpdate] = useState({ answered: 0, total: 0 });
   const [revealCorrect, setRevealCorrect] = useState(null);
   const [scores, setScores] = useState([]);
   const [uploading, setUploading] = useState(false);
+
+  // Saved quiz state
+  const [loadedQuizId, setLoadedQuizId] = useState(preloaded?.id ?? null);
+  const [quizName, setQuizName] = useState(preloaded?.name ?? '');
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState('');
+
+  // If navigated with a preloaded quiz, skip landing
+  useEffect(() => {
+    if (preloaded) setPhase('setup');
+  }, []);
 
   useEffect(() => {
     socket.connect();
@@ -87,7 +107,28 @@ export default function HostPage() {
     socket.emit('host:nextQuestion', { pin });
   }
 
-  // Question editor helpers
+  async function handleSaveQuiz() {
+    setSaving(true);
+    setSaveMsg('');
+    try {
+      if (loadedQuizId) {
+        await api.put(`/api/quizzes/${loadedQuizId}`, { name: quizName || 'Bez názvu', questions });
+        setSaveMsg('Uloženo!');
+      } else {
+        const name = quizName.trim() || 'Kvíz ' + new Date().toLocaleDateString('cs-CZ');
+        const { id } = await api.post('/api/quizzes', { name, questions });
+        setLoadedQuizId(id);
+        setQuizName(name);
+        setSaveMsg('Uloženo!');
+      }
+    } catch (err) {
+      setSaveMsg('Chyba: ' + err.message);
+    } finally {
+      setSaving(false);
+      setTimeout(() => setSaveMsg(''), 3000);
+    }
+  }
+
   function updateQuestion(idx, field, value) {
     setQuestions((qs) => qs.map((q, i) => (i === idx ? { ...q, [field]: value } : q)));
   }
@@ -118,10 +159,58 @@ export default function HostPage() {
 
   // ── RENDER ────────────────────────────────────────────────────────────────
 
+  if (phase === 'landing') {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen gap-8 px-4">
+        <div className="text-center">
+          <h1 className="text-5xl font-extrabold tracking-tight">
+            <span className="text-brand">Buzzer</span>
+            <span className="text-white">Bros</span>
+          </h1>
+          <p className="text-gray-400 mt-2">Hostovat hru</p>
+        </div>
+
+        <div className="w-full max-w-sm flex flex-col gap-4">
+          <button
+            onClick={() => setPhase('setup')}
+            className="bg-brand hover:bg-brand-dark transition-colors rounded-2xl py-5 font-bold text-xl shadow-lg"
+          >
+            Rychlá hra
+            <p className="text-brand-light font-normal text-sm mt-0.5">Bez účtu, jednorázově</p>
+          </button>
+
+          {user ? (
+            <Link
+              to="/dashboard"
+              className="bg-gray-900 hover:bg-gray-800 transition-colors rounded-2xl py-5 font-bold text-xl text-center shadow-lg border border-gray-700"
+            >
+              Moje kvízy
+              <p className="text-gray-400 font-normal text-sm mt-0.5">{user.email}</p>
+            </Link>
+          ) : (
+            <Link
+              to="/login"
+              className="bg-gray-900 hover:bg-gray-800 transition-colors rounded-2xl py-5 font-bold text-xl text-center shadow-lg border border-gray-700"
+            >
+              Přihlásit se / Registrovat
+              <p className="text-gray-500 font-normal text-sm mt-0.5">Ukládej kvízy, hraj kdykoliv</p>
+            </Link>
+          )}
+        </div>
+
+        <Link to="/" className="text-gray-600 text-sm hover:text-gray-400">
+          Jsem hráč →
+        </Link>
+      </div>
+    );
+  }
+
   if (phase === 'setup') {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen gap-8 px-4">
-        <h1 className="text-4xl font-extrabold text-brand">Vytvoř hru</h1>
+        <h1 className="text-4xl font-extrabold text-brand">
+          {preloaded ? preloaded.name : 'Vytvoř hru'}
+        </h1>
         <form
           onSubmit={handleCreate}
           className="w-full max-w-sm bg-gray-900 rounded-2xl p-8 flex flex-col gap-4 shadow-xl"
@@ -142,6 +231,12 @@ export default function HostPage() {
             Vytvořit místnost
           </button>
         </form>
+        <button
+          onClick={() => setPhase('landing')}
+          className="text-gray-600 text-sm hover:text-gray-400"
+        >
+          ← Zpět
+        </button>
       </div>
     );
   }
@@ -159,9 +254,7 @@ export default function HostPage() {
 
         {/* Players */}
         <div className="bg-gray-900 rounded-2xl p-6">
-          <h2 className="text-lg font-bold mb-3">
-            Připojení hráči ({players.length})
-          </h2>
+          <h2 className="text-lg font-bold mb-3">Připojení hráči ({players.length})</h2>
           {players.length === 0 ? (
             <p className="text-gray-500 text-sm">Zatím nikdo…</p>
           ) : (
@@ -175,6 +268,33 @@ export default function HostPage() {
           )}
         </div>
 
+        {/* Save quiz (logged-in users only) */}
+        {user && (
+          <div className="bg-gray-900 rounded-2xl p-5 flex flex-col gap-3">
+            <h3 className="font-bold text-gray-300 text-sm">Uložit kvíz do účtu</h3>
+            <div className="flex gap-3">
+              <input
+                value={quizName}
+                onChange={(e) => setQuizName(e.target.value)}
+                placeholder="Název kvízu…"
+                className="flex-1 bg-gray-800 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand"
+              />
+              <button
+                onClick={handleSaveQuiz}
+                disabled={saving}
+                className="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 transition-colors rounded-xl px-4 py-2 text-sm font-bold"
+              >
+                {saving ? 'Ukládám…' : loadedQuizId ? 'Uložit změny' : 'Uložit'}
+              </button>
+            </div>
+            {saveMsg && (
+              <p className={`text-sm ${saveMsg.startsWith('Chyba') ? 'text-red-400' : 'text-green-400'}`}>
+                {saveMsg}
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Question editor */}
         <div className="flex flex-col gap-6">
           <h2 className="text-lg font-bold">Otázky ({questions.length})</h2>
@@ -186,7 +306,11 @@ export default function HostPage() {
               onUpdate={(field, val) => updateQuestion(qi, field, val)}
               onAnswerUpdate={(ai, val) => updateAnswer(qi, ai, val)}
               onImageUpload={(file) => handleImageUpload(qi, file)}
-              onRemove={questions.length > 1 ? () => setQuestions((qs) => qs.filter((_, i) => i !== qi)) : null}
+              onRemove={
+                questions.length > 1
+                  ? () => setQuestions((qs) => qs.filter((_, i) => i !== qi))
+                  : null
+              }
             />
           ))}
           <button
@@ -259,7 +383,10 @@ export default function HostPage() {
         )}
 
         {phase === 'question' && (
-          <button onClick={handleReveal} className="bg-yellow-500 hover:bg-yellow-600 rounded-xl py-3 font-bold text-lg transition-colors">
+          <button
+            onClick={handleReveal}
+            className="bg-yellow-500 hover:bg-yellow-600 rounded-xl py-3 font-bold text-lg transition-colors"
+          >
             Odhalit správnou odpověď
           </button>
         )}
@@ -267,7 +394,10 @@ export default function HostPage() {
         {phase === 'reveal' && (
           <>
             <Scoreboard scores={scores} />
-            <button onClick={handleNext} className="bg-brand hover:bg-brand-dark rounded-xl py-3 font-bold text-lg transition-colors">
+            <button
+              onClick={handleNext}
+              className="bg-brand hover:bg-brand-dark rounded-xl py-3 font-bold text-lg transition-colors"
+            >
               Další otázka →
             </button>
           </>
@@ -281,7 +411,10 @@ export default function HostPage() {
       <div className="max-w-md mx-auto px-4 py-16 flex flex-col gap-8 text-center">
         <h2 className="text-4xl font-extrabold">Konec hry! 🎉</h2>
         <Scoreboard scores={scores} />
-        <button onClick={() => window.location.reload()} className="bg-brand hover:bg-brand-dark rounded-xl py-3 font-bold text-lg transition-colors">
+        <button
+          onClick={() => window.location.reload()}
+          className="bg-brand hover:bg-brand-dark rounded-xl py-3 font-bold text-lg transition-colors"
+        >
           Nová hra
         </button>
       </div>
@@ -311,7 +444,6 @@ function QuestionEditor({ index, question, onUpdate, onAnswerUpdate, onImageUplo
         className="bg-gray-800 rounded-xl px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-brand"
       />
 
-      {/* Answers */}
       <div className="grid grid-cols-2 gap-2">
         {question.answers.map((a, i) => (
           <div key={i} className="flex items-center gap-2">
@@ -335,7 +467,6 @@ function QuestionEditor({ index, question, onUpdate, onAnswerUpdate, onImageUplo
         ))}
       </div>
 
-      {/* Media */}
       <div className="flex flex-col gap-2">
         <label className="text-xs text-gray-500">Obrázek (upload)</label>
         <input
