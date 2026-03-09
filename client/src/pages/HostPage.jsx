@@ -39,6 +39,7 @@ export default function HostPage() {
   const [revealCorrect, setRevealCorrect] = useState(null);
   const [scores, setScores] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [connected, setConnected] = useState(false);
 
   // Saved quiz state
   const [loadedQuizId, setLoadedQuizId] = useState(preloaded?.id ?? null);
@@ -53,6 +54,10 @@ export default function HostPage() {
 
   useEffect(() => {
     socket.connect();
+
+    socket.on('connect', () => setConnected(true));
+    socket.on('disconnect', () => setConnected(false));
+    socket.on('connect_error', () => setError('Nelze se připojit k serveru.'));
 
     socket.on('host:created', ({ pin }) => {
       setPin(pin);
@@ -226,9 +231,10 @@ export default function HostPage() {
           {error && <p className="text-red-400 text-sm">{error}</p>}
           <button
             type="submit"
-            className="bg-brand hover:bg-brand-dark rounded-xl py-3 font-bold text-lg transition-colors"
+            disabled={!connected}
+            className="bg-brand hover:bg-brand-dark disabled:opacity-50 rounded-xl py-3 font-bold text-lg transition-colors"
           >
-            Vytvořit místnost
+            {connected ? 'Vytvořit místnost' : 'Připojuji…'}
           </button>
         </form>
         <button
