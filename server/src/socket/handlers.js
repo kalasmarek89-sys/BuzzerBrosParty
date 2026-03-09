@@ -146,6 +146,11 @@ function emitQuestion(io, room) {
     timeLimit: q.timeLimit ?? 30,
   };
   io.to(`room:${room.pin}`).emit('game:question', payload);
+  // reset answer count for host
+  io.to(room.hostSocketId).emit('host:answerUpdate', {
+    answered: 0,
+    total: room.players.size,
+  });
 }
 
 function serializeScores(room) {

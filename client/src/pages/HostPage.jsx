@@ -27,6 +27,7 @@ export default function HostPage() {
   const [questions, setQuestions] = useState([emptyQuestion()]);
   const [currentQ, setCurrentQ] = useState(null);
   const [answerUpdate, setAnswerUpdate] = useState({ answered: 0, total: 0 });
+  const [revealCorrect, setRevealCorrect] = useState(null);
   const [scores, setScores] = useState([]);
   const [uploading, setUploading] = useState(false);
 
@@ -42,10 +43,12 @@ export default function HostPage() {
     socket.on('host:answerUpdate', (data) => setAnswerUpdate(data));
     socket.on('game:question', (q) => {
       setCurrentQ(q);
-      setAnswerUpdate({ answered: 0, total: players.length });
+      setRevealCorrect(null);
+      setAnswerUpdate({ answered: 0, total: 0 });
       setPhase('question');
     });
     socket.on('game:reveal', ({ correct, scores }) => {
+      setRevealCorrect(correct);
       setScores(scores);
       setPhase('reveal');
     });
@@ -237,7 +240,7 @@ export default function HostPage() {
               key={i}
               className={`rounded-xl p-4 flex items-center gap-3 ${
                 phase === 'reveal'
-                  ? i === currentQ.correct
+                  ? i === revealCorrect
                     ? 'bg-green-600'
                     : 'bg-gray-800 opacity-50'
                   : ANSWER_COLORS[i]

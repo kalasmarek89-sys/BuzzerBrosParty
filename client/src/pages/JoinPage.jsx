@@ -6,6 +6,7 @@ export default function JoinPage() {
   const [pin, setPin] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   function handleJoin(e) {
@@ -16,6 +17,7 @@ export default function JoinPage() {
       return;
     }
 
+    setLoading(true);
     socket.connect();
 
     socket.once('player:joined', () => {
@@ -24,6 +26,7 @@ export default function JoinPage() {
 
     socket.once('error', ({ message }) => {
       setError(message);
+      setLoading(false);
       socket.disconnect();
     });
 
@@ -72,9 +75,10 @@ export default function JoinPage() {
 
         <button
           type="submit"
-          className="mt-2 bg-brand hover:bg-brand-dark transition-colors rounded-xl py-3 font-bold text-lg"
+          disabled={loading}
+          className="mt-2 bg-brand hover:bg-brand-dark disabled:opacity-60 transition-colors rounded-xl py-3 font-bold text-lg"
         >
-          Připojit se
+          {loading ? 'Připojuji…' : 'Připojit se'}
         </button>
       </form>
 
