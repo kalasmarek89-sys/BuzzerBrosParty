@@ -4,3 +4,4 @@ server/uploads/*
 client/dist/
 *.env
 .env
+data.db
