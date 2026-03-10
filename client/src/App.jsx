@@ -3,6 +3,8 @@ import { useAuth } from './context/AuthContext.jsx';
 import JoinPage from './pages/JoinPage.jsx';
 import HostPage from './pages/HostPage.jsx';
 import PlayPage from './pages/PlayPage.jsx';
+import GoldRushHostPage from './pages/GoldRushHostPage.jsx';
+import GoldRushPlayPage from './pages/GoldRushPlayPage.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import RegisterPage from './pages/RegisterPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
@@ -18,7 +20,9 @@ export default function App() {
     <Routes>
       <Route path="/" element={<JoinPage />} />
       <Route path="/host" element={<HostPage />} />
+      <Route path="/host/goldrush" element={<GoldRushHostPage />} />
       <Route path="/play" element={<PlayPage />} />
+      <Route path="/play/goldrush" element={<GoldRushPlayPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route

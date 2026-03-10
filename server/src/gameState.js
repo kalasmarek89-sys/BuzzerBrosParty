@@ -11,7 +11,7 @@
 
 const rooms = new Map(); // pin -> room
 
-export function createRoom(pin, hostSocketId) {
+export function createRoom(pin, hostSocketId, mode = 'classic') {
   const room = {
     pin,
     hostSocketId,
@@ -19,6 +19,16 @@ export function createRoom(pin, hostSocketId) {
     questions: [],
     currentQuestion: null,
     phase: 'lobby',
+    mode,
+    // GoldRush fields (only used when mode === 'goldrush')
+    grCategories: null,
+    grBricks: {},
+    grTurnOrder: [],
+    grTurnIndex: 0,
+    grCurrentCell: null,
+    grQuestionStartTime: null,
+    grPhase: 'lobby',
+    grBonusWinnerId: null,
   };
   rooms.set(pin, room);
   return room;

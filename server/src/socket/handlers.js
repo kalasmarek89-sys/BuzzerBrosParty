@@ -5,20 +5,23 @@ import {
   getRoomByHost,
   getRoomByPlayer,
 } from '../gameState.js';
+import { registerGRHandlers } from './grHandlers.js';
 
 export function registerHandlers(io, socket) {
+  registerGRHandlers(io, socket);
+
   // ── HOST: create room ──────────────────────────────────────────────────────
-  socket.on('host:create', ({ pin }) => {
+  socket.on('host:create', ({ pin, mode = 'classic' }) => {
     if (!pin || pin.length < 3) {
       return socket.emit('error', { message: 'PIN musí mít alespoň 3 znaky.' });
     }
     if (getRoom(pin)) {
       return socket.emit('error', { message: 'Místnost s tímto PINem již existuje.' });
     }
-    const room = createRoom(pin, socket.id);
+    const room = createRoom(pin, socket.id, mode);
     socket.join(`room:${pin}`);
     socket.emit('host:created', { pin });
-    console.log(`[host:create] PIN=${pin}`);
+    console.log(`[host:create] PIN=${pin} mode=${mode}`);
   });
 
   // ── HOST: update questions ─────────────────────────────────────────────────
@@ -74,14 +77,17 @@ export function registerHandlers(io, socket) {
     if (room.phase !== 'lobby') {
       return socket.emit('error', { message: 'Hra již probíhá.' });
     }
-    room.players.set(socket.id, { name, score: 0, answer: null });
+    if (room.mode === 'goldrush' && room.players.size >= 6) {
+      return socket.emit('error', { message: 'Místnost je plná (max. 6 týmů).' });
+    }
+    room.players.set(socket.id, { name, score: 0, answer: null, grAnswer: null, grAnswerTime: null });
     socket.join(`room:${pin}`);
-    socket.emit('player:joined', { pin, name });
+    socket.emit('player:joined', { pin, name, mode: room.mode });
     // notify host
     io.to(room.hostSocketId).emit('host:playerJoined', {
       players: serializePlayers(room),
     });
-    console.log(`[player:join] ${name} → PIN=${pin}`);
+    console.log(`[player:join] ${name} → PIN=${pin} mode=${room.mode}`);
   });
 
   // ── PLAYER: submit answer ──────────────────────────────────────────────────
@@ -121,6 +127,16 @@ export function registerHandlers(io, socket) {
     if (playerRoom) {
       const player = playerRoom.players.get(socket.id);
       playerRoom.players.delete(socket.id);
+      // GoldRush: remove from turn order
+      if (playerRoom.mode === 'goldrush' && playerRoom.grTurnOrder) {
+        const idx = playerRoom.grTurnOrder.indexOf(socket.id);
+        if (idx !== -1) {
+          playerRoom.grTurnOrder.splice(idx, 1);
+          if (playerRoom.grTurnOrder.length > 0) {
+            playerRoom.grTurnIndex = playerRoom.grTurnIndex % playerRoom.grTurnOrder.length;
+          }
+        }
+      }
       io.to(playerRoom.hostSocketId).emit('host:playerLeft', {
         players: serializePlayers(playerRoom),
       });

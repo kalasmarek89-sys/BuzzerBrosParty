@@ -43,10 +43,10 @@ export default function DashboardPage() {
   }
 
   async function handlePlay(quiz) {
-    // Load full questions before navigating
     try {
       const { quiz: full } = await api.get(`/api/quizzes/${quiz.id}`);
-      navigate('/host', { state: { quiz: full } });
+      const path = full.type === 'goldrush' ? '/host/goldrush' : '/host';
+      navigate(path, { state: { quiz: full } });
     } catch (err) {
       setError(err.message);
     }
@@ -111,10 +111,17 @@ export default function DashboardPage() {
               className="bg-gray-900 rounded-2xl p-5 flex items-center justify-between gap-4"
             >
               <div>
-                <p className="font-bold text-lg">{q.name}</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-bold text-lg">{q.name}</p>
+                  {q.type === 'goldrush' && (
+                    <span className="bg-yellow-500 text-gray-900 text-xs font-bold px-2 py-0.5 rounded-full">GoldRush</span>
+                  )}
+                </div>
                 <p className="text-gray-500 text-sm">
-                  {q.question_count} {q.question_count === 1 ? 'otázka' : q.question_count < 5 ? 'otázky' : 'otázek'} ·{' '}
-                  upraveno {new Date(q.updated_at).toLocaleDateString('cs-CZ')}
+                  {q.type === 'goldrush'
+                    ? `${q.question_count} kategorií`
+                    : `${q.question_count} ${q.question_count === 1 ? 'otázka' : q.question_count < 5 ? 'otázky' : 'otázek'}`}{' '}
+                  · upraveno {new Date(q.updated_at).toLocaleDateString('cs-CZ')}
                 </p>
               </div>
               <div className="flex gap-2 flex-shrink-0">

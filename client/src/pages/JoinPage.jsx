@@ -20,8 +20,9 @@ export default function JoinPage() {
     setLoading(true);
     socket.connect();
 
-    socket.once('player:joined', () => {
-      navigate('/play', { state: { pin, name } });
+    socket.once('player:joined', ({ mode }) => {
+      const path = mode === 'goldrush' ? '/play/goldrush' : '/play';
+      navigate(path, { state: { pin, name } });
     });
 
     socket.once('error', ({ message }) => {

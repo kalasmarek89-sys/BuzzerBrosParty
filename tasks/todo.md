@@ -8,80 +8,122 @@
 - Podpora týmů i sólo režimu
 - Celé UI v češtině
 
-## Phase 1: Project Scaffold
+---
 
-### Goal
-Monorepo, Express + Socket.io server, React + Vite client, fungující Socket.io spojení.
+# GoldRush Mode – Implementation Plan
 
-### Architecture
-- **Monorepo**: npm workspaces (`client/` + `server/`)
-- **Server**: Express + Socket.io + cors + multer (upload obrázků)
-- **Client**: Vite + React + Tailwind + socket.io-client
-- **Média**: Obrázky = upload na server (`server/uploads/`), videa = YouTube embed URL
-- **Připojení hráčů**: PIN kód (host nastaví při vytvoření hry), funguje přes internet
-- **Routing**: React Router – `/` (join), `/host` (hostitel), `/play` (hráč v hře)
-- **State**: In-memory na serveru (rooms, players, questions, scores)
-- **Deploy**: Internet-ready – `VITE_SERVER_URL` env var
+## Přehled
+Nový herní mód inspirovaný Riskuj / Jeopardy. Grid 6×6 + bonus řádek.
 
-### Scaffold Tasks
+## Architektura
 
-- [ ] Root `package.json` with npm workspaces
-- [ ] `server/` – Express + Socket.io, CORS, hello-world event
-- [ ] `client/` – Vite + React + Tailwind, socket.io-client, hello-world listener
-- [ ] Confirm bidirectional Socket.io message
-- [ ] `.env.example` + basic `README.md`
-
-### File Structure
+### Game State (server)
 ```
-BuzzerBrosParty/
-├── package.json              ← root workspaces
-├── .env.example
-├── client/
-│   ├── package.json
-│   ├── vite.config.js
-│   ├── tailwind.config.js
-│   ├── index.html
-│   └── src/
-│       ├── main.jsx
-│       ├── App.jsx           ← React Router
-│       ├── socket.js         ← singleton socket instance
-│       └── pages/
-│           ├── JoinPage.jsx  ← PIN vstup pro hráče
-│           ├── HostPage.jsx  ← vytvoření + řízení hry
-│           └── PlayPage.jsx  ← hráčský pohled během hry
-└── server/
-    ├── package.json
-    └── src/
-        ├── index.js          ← Express + Socket.io entry
-        ├── gameState.js      ← in-memory rooms/players/questions
-        └── socket/
-            └── handlers.js   ← Socket.io event handlers
+room.mode = 'goldrush'
+room.grCategories = [
+  {
+    name: string,
+    color: string,         // one of 6 colors
+    questions: [
+      { text, answers[4], correct(0-3), points(100-600), answered: false },  // 6x
+      { text, answers[4], correct(0-3), bonus: true, answered: false }        // 1x bonus
+    ]
+  }
+]  // 6 categories
+
+room.grBricks = {
+  '0-2': 'gold',    // 'catIdx-qIdx' -> 'gold'|'silver'|'bronze'
+  '3-4': 'silver',
+  '5-0': 'bronze',
+}
+room.grTurnOrder = [socketId, ...]   // round-robin pole týmů
+room.grTurnIndex = 0                  // kdo vybírá
+room.grCurrentCell = null            // { catIdx, qIdx } | null
+room.grQuestionStartTime = null       // Date.now() při otevření otázky
+room.grPhase = 'lobby' | 'grid' | 'question' | 'reveal' | 'bonus_steal' | 'finished'
 ```
 
-## Phase 2: Host UI – Vytvoření hry
-- [ ] Nastavení PINu pro místnost
-- [ ] Editor otázek: text otázky, 2–4 odpovědi, správná odpověď
-- [ ] Upload obrázků k otázkám (multer)
-- [ ] YouTube embed URL k otázkám
-- [ ] Náhled otázky (obrázek/video + text)
-- [ ] Konfigurace: počet týmů / sólo režim, časový limit na odpověď
+### Bodování
+- Timer: 25 sekund
+- Body = `Math.max(0, Math.round(basePoints * (timeRemaining / 25)))`
+- Cihličky: Gold +200, Silver +100, Bronze +50 → dostane tým co vybral otázku
+- Bonus (správná odpověď): vyber cílový tým → ukradni 50 bodů, sám +50
 
-## Phase 3: Připojení hráčů
-- [ ] JoinPage: zadání PINu + jména/týmu
-- [ ] Waiting lobby – host vidí připojené hráče
-- [ ] QR kód pro snadné připojení (volitelně)
+### Socket Events – nové (prefix `gr:`)
+**Host → Server:**
+- `gr:setCategories({ pin, categories })`
+- `gr:startGame({ pin })`
+- `gr:selectQuestion({ pin, catIdx, qIdx })`
+- `gr:reveal({ pin })`
+- `gr:stealTarget({ pin, targetSocketId })`
+- `gr:backToGrid({ pin })`
 
-## Phase 4: Herní smyčka (real-time)
-- [ ] Host zobrazí otázku → všichni hráči ji vidí na svém zařízení
-- [ ] Hráči odpovídají (A/B/C/D) v časovém limitu
-- [ ] Vyhodnocení – správná odpověď, body
-- [ ] Průběžný scoreboard
-- [ ] Host přepíná mezi otázkami
+**Server → Client:**
+- `gr:started`
+- `gr:gridState({ categories, bricks, turnTeam, scores })`
+- `gr:questionOpen({ catIdx, qIdx, text, answers, timeLimit:25, brickType|null })`
+- `gr:reveal({ correct, scores, teamAnswers })`
+- `gr:bonusSteal({ scores })`
+- `gr:finished({ scores })`
 
-## Phase 5: Deploy
-- [ ] Dockerfile nebo Render/Railway config
-- [ ] HTTPS + WSS
+## Soubory ke změně / vytvoření
+
+### Nové soubory
+- `client/src/pages/GoldRushHostPage.jsx`
+- `client/src/pages/GoldRushPlayPage.jsx`
+- `server/src/socket/grHandlers.js`
+
+### Upravené soubory
+- `client/src/App.jsx` – přidat `/host/goldrush`, `/play/goldrush` routes
+- `client/src/pages/HostPage.jsx` – landing: výběr módu (Classic / GoldRush)
+- `server/src/gameState.js` – přidat `mode` field + GR helpers
+- `server/src/socket/handlers.js` – importovat a registrovat grHandlers
 
 ---
+
+## Checklist
+
+### Fáze 1 – Server: GoldRush state & handlers
+- [ ] Upravit `gameState.js`: `createRoom(pin, hostSocketId, mode)` + GR fields
+- [ ] Vytvořit `grHandlers.js` se všemi gr: events
+  - [ ] `gr:setCategories` – uložit kategorie, náhodně rozmístit 3 cihličky
+  - [ ] `gr:startGame` – přejít na 'grid', broadcastovat `gr:gridState`
+  - [ ] `gr:selectQuestion` – ověřit turn + dostupnost, odhalit cihličku, timer start
+  - [ ] `gr:reveal` – vypočítat body (time-based), broadcastovat výsledky
+  - [ ] `gr:stealTarget` – bonus krádež 50 bodů
+  - [ ] `gr:backToGrid` – reset cell, posunout turn, broadcastovat grid
+  - [ ] Disconnect handling pro GR
+- [ ] Zaregistrovat grHandlers v `handlers.js`
+
+### Fáze 2 – Mode Selection
+- [ ] Upravit `HostPage.jsx` landing: dvě karty Classic / GoldRush
+- [ ] GoldRush volba přesměruje na `/host/goldrush`
+- [ ] Přidat route `/host/goldrush` a `/play/goldrush` do `App.jsx`
+
+### Fáze 3 – GoldRushHostPage
+- [ ] Setup fáze: zadání PIN + vytvoření GR místnosti
+- [ ] Editor kategorií: 6 kategorií, 6 otázek (100-600) + 1 bonus
+- [ ] Lobby fáze: čekání na hráče (max 6)
+- [ ] Grid fáze: 6×6 mřížka + bonus buňky, barevné sloupce, indikátor tahu
+- [ ] Question overlay: otázka, timer, počet odpovědí, cihlička animace
+- [ ] Reveal fáze: správná odpověď, body, bonus steal UI
+- [ ] Finished fáze: finální skóre
+
+### Fáze 4 – GoldRushPlayPage
+- [ ] Čekání na výběr otázky
+- [ ] Otázka: 4 tlačítka + vizuální timer (body klesají)
+- [ ] Reveal: správná/špatná + body z tohoto kola
+- [ ] Finished: finální leaderboard
+
+### Fáze 5 – Verifikace
+- [ ] Classic mód stále funguje beze změny
+- [ ] Manuální test: host vytvoří GR hru, 3 hráči se připojí
+- [ ] Ověřit bodování (time-based)
+- [ ] Ověřit cihličky (náhodné rozmístění, reward)
+- [ ] Ověřit bonus otázku (odemknutí, krádež)
+- [ ] Ověřit turn rotation
+
+---
+
 ## Review
-_To be filled after each phase_
+_Doplnit po dokončení_

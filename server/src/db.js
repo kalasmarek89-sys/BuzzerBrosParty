@@ -33,3 +33,10 @@ db.exec(`
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
   );
 `);
+
+// Migration: add type column if it doesn't exist yet
+try {
+  db.exec(`ALTER TABLE quizzes ADD COLUMN type TEXT NOT NULL DEFAULT 'classic'`);
+} catch {
+  // Column already exists
+}

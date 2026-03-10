@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useLocation, Link } from 'react-router-dom';
+import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { socket } from '../socket.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api.js';
@@ -23,6 +23,7 @@ const emptyQuestion = () => ({
 
 export default function HostPage() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const preloaded = location.state?.quiz ?? null;
 
@@ -176,12 +177,22 @@ export default function HostPage() {
         </div>
 
         <div className="w-full max-w-sm flex flex-col gap-4">
+          <p className="text-gray-500 text-xs text-center uppercase tracking-widest">Vyber mód</p>
+
           <button
             onClick={() => setPhase('setup')}
             className="bg-brand hover:bg-brand-dark transition-colors rounded-2xl py-5 font-bold text-xl shadow-lg"
           >
-            Rychlá hra
-            <p className="text-brand-light font-normal text-sm mt-0.5">Bez účtu, jednorázově</p>
+            Classic
+            <p className="text-brand-light font-normal text-sm mt-0.5">Kvíz s A/B/C/D otázkami</p>
+          </button>
+
+          <button
+            onClick={() => navigate('/host/goldrush')}
+            className="bg-yellow-500 hover:bg-yellow-400 transition-colors rounded-2xl py-5 font-bold text-xl shadow-lg text-gray-900"
+          >
+            GoldRush
+            <p className="text-yellow-800 font-normal text-sm mt-0.5">Riskuj – grid otázek, cihličky, krádež</p>
           </button>
 
           {user ? (

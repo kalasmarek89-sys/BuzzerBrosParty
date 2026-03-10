@@ -19,7 +19,7 @@ function authMiddleware(req, res, next) {
 router.get('/', authMiddleware, (req, res) => {
   const rows = db
     .prepare(
-      `SELECT id, name,
+      `SELECT id, name, type,
         (SELECT COUNT(*) FROM json_each(questions)) AS question_count,
         created_at, updated_at
        FROM quizzes WHERE user_id = ? ORDER BY updated_at DESC`
@@ -39,24 +39,24 @@ router.get('/:id', authMiddleware, (req, res) => {
 
 // POST /api/quizzes
 router.post('/', authMiddleware, (req, res) => {
-  const { name, questions } = req.body ?? {};
+  const { name, questions, type = 'classic' } = req.body ?? {};
   if (!name?.trim()) return res.status(400).json({ error: 'Název kvízu je povinný.' });
   const result = db
-    .prepare('INSERT INTO quizzes (user_id, name, questions) VALUES (?, ?, ?)')
-    .run(req.user.userId, name.trim(), JSON.stringify(questions ?? []));
+    .prepare('INSERT INTO quizzes (user_id, name, questions, type) VALUES (?, ?, ?, ?)')
+    .run(req.user.userId, name.trim(), JSON.stringify(questions ?? []), type);
   res.json({ id: result.lastInsertRowid, name: name.trim() });
 });
 
 // PUT /api/quizzes/:id
 router.put('/:id', authMiddleware, (req, res) => {
-  const { name, questions } = req.body ?? {};
+  const { name, questions, type } = req.body ?? {};
   const row = db
     .prepare('SELECT id FROM quizzes WHERE id = ? AND user_id = ?')
     .get(req.params.id, req.user.userId);
   if (!row) return res.status(404).json({ error: 'Kvíz nenalezen.' });
   db.prepare(
-    'UPDATE quizzes SET name = ?, questions = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-  ).run(name?.trim() ?? '', JSON.stringify(questions ?? []), req.params.id);
+    'UPDATE quizzes SET name = ?, questions = ?, type = COALESCE(?, type), updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+  ).run(name?.trim() ?? '', JSON.stringify(questions ?? []), type ?? null, req.params.id);
   res.json({ ok: true });
 });
 
